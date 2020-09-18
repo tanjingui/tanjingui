@@ -1,0 +1,2 @@
+include ':app', ':tan'
+rootProject.name='tanjingui'
