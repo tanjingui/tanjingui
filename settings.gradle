@@ -1,2 +1,2 @@
-include ':app', ':tan'
+include ':tan'
 rootProject.name='tanjingui'
