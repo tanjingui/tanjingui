@@ -1,137 +1,171 @@
 package com.tanjingui.tan;
 
-import java.security.InvalidKeyException;
-import java.security.Key;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.util.Arrays;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.crypto.*;
-import javax.crypto.spec.SecretKeySpec;
+import android.annotation.SuppressLint;
+import android.text.TextUtils;
 import android.util.Base64;
 
-/**
- * @version V1.0
- * @author lq
- * @desc AES 加密工具类
- */
+import java.security.Provider;
+import java.security.SecureRandom;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
 public class AesUtils {
-    /*** 默认的编码 */
-    private static final String CODE = "utf-8";
-    private static final String KEY_ALGORITHM = "AES";
-    /*** 默认的加密算法 */
-    private static final String DEFAULT_CIPHER_ALGORITHM = "AES/ECB/PKCS5Padding";
+
+
+    private final static String HEX = "0123456789ABCDEF";
+    private static final String CBC_PKCS5_PADDING = "AES/CBC/PKCS5Padding";//AES是加密方式 CBC是工作模式 PKCS5Padding是填充模式
+    private static final String AES = "AES";//AES 加密
+    private static final String SHA1PRNG = "SHA1PRNG";// SHA1PRNG 强随机种子算法, 要区别4.2以上版本的调用方法
 
     /**
-     * @param algorithm 加密算法
-     * @param mode      密码器模式
-     * @param key       加密秘钥
+     * 返回固定的KEY
      * @return
      */
-    public static Cipher initCipher(String algorithm, int mode, Key key) {
-        Cipher cipher = null;
-        try {
-            // 创建密码器
-            cipher = Cipher.getInstance(algorithm);
-            // 初始化为某种模式的密码器ENCRYPT_MODE/DECRYPT_MODE/WRAP_MODE/UNWRAP_MODE/PUBLIC_KEY/PRIVATE_KEY
-            cipher.init(mode, key);
-        } catch (InvalidKeyException e) {
-            e.printStackTrace();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        } catch (NoSuchPaddingException e) {
-            e.printStackTrace();
-        }
-        return cipher;
+    public static String fixedKey(){
+        String secret_key = "F2492E93586F768B1E9C80C10EBA1CA88AB6B16C";
+        //"{\"activation_result\":-2,\"member_username\":\"qwe\",\"member_expirationtime\":0}";
+        return  secret_key;
     }
-
-    public static byte[] doFinal(Cipher cipher, byte[] content) {
-        try {
-            return cipher.doFinal(content);
-        } catch (IllegalBlockSizeException e) {
-            e.printStackTrace();
-        } catch (BadPaddingException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
     /**
-     * AES 加密操作
-     *
-     * @param content  待加密内容
-     * @param password 加密密码
-     * @return 返回Base64转码后的加密数据
+     * 生成随机数，可以当做动态的密钥 加密和解密的密钥必须一致，不然将不能解密
      */
-    public static String encrypt(String content, String password) {
+    public static String generateKey() {
         try {
-
-            byte[] byteContent = content.getBytes(CODE);
-            //初始化密码器
-            Cipher cipher = initCipher(DEFAULT_CIPHER_ALGORITHM, Cipher.ENCRYPT_MODE, getSecretKey(password));
-            // 加密
-            byte[] result = cipher.doFinal(byteContent);
-            //通过Base64转码返回
-            return Arrays.toString(Base64.encode(result, Base64.DEFAULT));
-        } catch (Exception ex) {
-            Logger.getLogger(AesUtils.class.getName()).log(Level.SEVERE, null, ex);
+            SecureRandom localSecureRandom = SecureRandom.getInstance(SHA1PRNG);
+            byte[] bytes_key = new byte[20];
+            localSecureRandom.nextBytes(bytes_key);
+            String str_key = toHex(bytes_key);
+            return str_key;
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-
         return null;
     }
 
     /**
-     * AES 解密操作
+     * 对密钥进行处理
      *
-     * @param content
-     * @param password
+     * @param seed
      * @return
+     * @throws Exception
      */
-    public static String decrypt(String content, String password) {
+    @SuppressLint("DeletedProvider")
+    private static byte[] getRawKey(byte[] seed) throws Exception {
+        KeyGenerator kgen = KeyGenerator.getInstance(AES);
+        //for android
+        SecureRandom sr = null;
+        // 在4.2以上版本中，SecureRandom获取方式发生了改变
+        int sdk_version = android.os.Build.VERSION.SDK_INT;
+        if (sdk_version > 23) {  // Android  6.0 以上
+            sr = SecureRandom.getInstance(SHA1PRNG, new CryptoProvider());
+        } else if (android.os.Build.VERSION.SDK_INT >= 17) {   //4.2及以上
+            sr = SecureRandom.getInstance(SHA1PRNG, "Crypto");
+        } else {
+            sr = SecureRandom.getInstance(SHA1PRNG);
+        }
 
+
+        // for Java
+        // secureRandom = SecureRandom.getInstance(SHA1PRNG);
+        sr.setSeed(seed);
+        kgen.init(128, sr); //256 bits or 128 bits,192bits
+        //AES中128位密钥版本有10个加密循环，192比特密钥版本有12个加密循环，256比特密钥版本则有14个加密循环。
+        SecretKey skey = kgen.generateKey();
+        byte[] raw = skey.getEncoded();
+        return raw;
+    }
+
+    /**
+     * 加密
+     */
+    public static String encrypt(String key, String cleartext) {
+        if (TextUtils.isEmpty(cleartext)) {
+            return cleartext;
+        }
         try {
-            //初始化密码器
-            Cipher cipher = initCipher(DEFAULT_CIPHER_ALGORITHM, Cipher.DECRYPT_MODE, getSecretKey(password));
-            // 加密
-            byte[] result = cipher.doFinal(Base64.decode(content,Base64.DEFAULT));
-            return new String(result, CODE);
-        } catch (Exception ex) {
-            Logger.getLogger(AesUtils.class.getName()).log(Level.SEVERE, null, ex);
+            byte[] result = encrypt(key, cleartext.getBytes());
+            //            return Base64Encoder.encode(result);
+            return new String(Base64.encode(result, Base64.DEFAULT));
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return null;
     }
 
     /**
-     * 生成加密秘钥
-     *
-     * @return
+     * 加密
      */
-    private static SecretKeySpec getSecretKey(final String password) {
-        //返回生成指定算法密钥生成器的 KeyGenerator 对象
-        KeyGenerator kg = null;
+    private static byte[] encrypt(String key, byte[] clear) throws Exception {
+        byte[] raw = getRawKey(key.getBytes());
+        SecretKeySpec skeySpec = new SecretKeySpec(raw, AES);
+        Cipher cipher = Cipher.getInstance(CBC_PKCS5_PADDING);
+        cipher.init(Cipher.ENCRYPT_MODE, skeySpec, new IvParameterSpec(new byte[cipher.getBlockSize()]));
+        byte[] encrypted = cipher.doFinal(clear);
+        return encrypted;
+    }
+
+    /**
+     * 解密
+     */
+    public static String decrypt(String key, String encrypted) {
+        if (TextUtils.isEmpty(encrypted)) {
+            return encrypted;
+        }
         try {
-            kg = KeyGenerator.getInstance(KEY_ALGORITHM);
-            //AES 要求密钥长度为 128
-            kg.init(128, new SecureRandom(password.getBytes()));
-            //生成一个密钥
-            SecretKey secretKey = kg.generateKey();
-            // 转换为AES专用密钥
-            return new SecretKeySpec(secretKey.getEncoded(), KEY_ALGORITHM);
-        } catch (NoSuchAlgorithmException ex) {
-            Logger.getLogger(AesUtils.class.getName()).log(Level.SEVERE, null, ex);
+            //            byte[] enc = Base64Decoder.decodeToBytes(encrypted);
+            byte[] enc = Base64.decode(encrypted, Base64.DEFAULT);
+            byte[] result = decrypt(key, enc);
+            return new String(result);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return null;
     }
 
+    /**
+     * 解密
+     */
+    private static byte[] decrypt(String key, byte[] encrypted) throws Exception {
+        byte[] raw = getRawKey(key.getBytes());
+        SecretKeySpec skeySpec = new SecretKeySpec(raw, AES);
+        Cipher cipher = Cipher.getInstance(CBC_PKCS5_PADDING);
+        cipher.init(Cipher.DECRYPT_MODE, skeySpec, new IvParameterSpec(new byte[cipher.getBlockSize()]));
+        byte[] decrypted = cipher.doFinal(encrypted);
+        return decrypted;
+    }
 
-//    public static void test(){
-//        String s = "hello,您好";
-//        System.out.println("加密前的明文:" + s);
-//        String s1 = AesUtils.encrypt(s, "1234");
-//        System.out.println("密文:" + s1);
-//        System.out.println("解密后的明文:" + AesUtils.decrypt(s1, "1234"));
-//    }
+    //二进制转字符
+    public static String toHex(byte[] buf) {
+        if (buf == null)
+            return "";
+        StringBuffer result = new StringBuffer(2 * buf.length);
+        for (int i = 0; i < buf.length; i++) {
+            appendHex(result, buf[i]);
+        }
+        return result.toString();
+    }
 
+    private static void appendHex(StringBuffer sb, byte b) {
+        sb.append(HEX.charAt((b >> 4) & 0x0f)).append(HEX.charAt(b & 0x0f));
+    }
+
+
+    // 增加  CryptoProvider  类
+
+    public static class CryptoProvider extends Provider {
+        /**
+         * Creates a Provider and puts parameters
+         */
+        public CryptoProvider() {
+            super("Crypto", 1.0, "HARMONY (SHA1 digest; SecureRandom; SHA1withDSA signature)");
+            put("SecureRandom.SHA1PRNG",
+                    "org.apache.harmony.security.provider.crypto.SHA1PRNG_SecureRandomImpl");
+            put("SecureRandom.SHA1PRNG ImplementedIn", "Software");
+        }
+    }
 
 }
