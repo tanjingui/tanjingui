@@ -1,19 +1,15 @@
 package com.tanjingui.tan;
 
-import android.content.Context;
-import android.util.Log;
-
-import com.tanjingui.tan.commons.Base64;
-
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.crypto.*;
 import javax.crypto.spec.SecretKeySpec;
-
+import android.util.Base64;
 
 /**
  * @version V1.0
@@ -77,7 +73,7 @@ public class AesUtils {
             // 加密
             byte[] result = cipher.doFinal(byteContent);
             //通过Base64转码返回
-            return Base64.encode(result);
+            return Arrays.toString(Base64.encode(result, Base64.DEFAULT));
         } catch (Exception ex) {
             Logger.getLogger(AesUtils.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -98,7 +94,7 @@ public class AesUtils {
             //初始化密码器
             Cipher cipher = initCipher(DEFAULT_CIPHER_ALGORITHM, Cipher.DECRYPT_MODE, getSecretKey(password));
             // 加密
-            byte[] result = cipher.doFinal(Base64.decode(content));
+            byte[] result = cipher.doFinal(Base64.decode(content,Base64.DEFAULT));
             return new String(result, CODE);
         } catch (Exception ex) {
             Logger.getLogger(AesUtils.class.getName()).log(Level.SEVERE, null, ex);
